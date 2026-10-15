@@ -25,8 +25,8 @@ class LocationTrackingService : Service() {
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         
         try {
-            // Conectando ao backend via WebSocket (Socket.io) no servidor físico (Porta 8888)
-            socket = IO.socket("http://192.168.15.52:8888")
+            // Conectando ao backend via WebSocket (Socket.io) no servidor físico (Porta 3333)
+            socket = IO.socket("http://192.168.15.52:3333")
             socket?.connect()
         } catch (e: Exception) {
             e.printStackTrace()

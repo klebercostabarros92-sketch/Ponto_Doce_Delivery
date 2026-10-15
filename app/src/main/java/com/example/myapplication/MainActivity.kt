@@ -34,12 +34,15 @@ import io.socket.client.Socket
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-// Cores baseadas na imagem da marca (Marrom, Rosa e Rosa Claro)
-val BrownText = Color(0xFF5A3219)
-val PinkAccent = Color(0xFFF25C78)
-val LightPinkBackground = Color(0xFFFFE4E1)
-val CardBackground = Color(0xFFFFFFFF)
-val GreenButton = Color(0xFF4CAF50)
+// Cores extraídas do novo logotipo (Azul Marinho e Dourado)
+val NavyBackground = Color(0xFF0A1F3A)     // Fundo principal escuro
+val NavyCard = Color(0xFF112B4F)           // Fundo dos cartões e modais
+val GoldAccent = Color(0xFFE5B951)         // Dourado do texto principal e ícones
+val LightGold = Color(0xFFFDECB5)          // Dourado clarinho para detalhes e textos secundários
+val WhiteText = Color(0xFFFFFFFF)
+val GreenButton = Color(0xFF2E7D32)        // Verde escuro elegante
+val RedButton = Color(0xFFC62828)          // Vermelho escuro elegante
+val DialogBackground = Color(0xFF0F2645)   // Fundo da janela pop-up
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -145,7 +148,7 @@ fun PontoDoceAdminApp() {
         
         // Conexão WebSocket para receber alertas de NOVO PEDIDO em tempo real
         try {
-            val socket: Socket = IO.socket("http://192.168.15.52:8888")
+            val socket: Socket = IO.socket("http://192.168.15.52:3333")
             socket.connect()
             
             socket.on("admin:new_order") { args ->
@@ -186,7 +189,7 @@ fun PontoDoceAdminApp() {
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = LightPinkBackground,
+        containerColor = NavyBackground,
         snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { innerPadding ->
         Column(
@@ -199,19 +202,19 @@ fun PontoDoceAdminApp() {
                 text = "$storeName — Gestão",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
-                color = BrownText
+                color = GoldAccent
             )
             Text(
                 text = instagramUrl,
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium,
-                color = PinkAccent,
+                color = LightGold,
                 modifier = Modifier.padding(bottom = 24.dp)
             )
 
             // Card de Status da Loja
             Card(
-                colors = CardDefaults.cardColors(containerColor = CardBackground),
+                colors = CardDefaults.cardColors(containerColor = NavyCard),
                 shape = RoundedCornerShape(12.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                 modifier = Modifier
@@ -229,7 +232,7 @@ fun PontoDoceAdminApp() {
                         text = "Loja Aberta para Vendas?",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium,
-                        color = BrownText
+                        color = WhiteText
                     )
                     Switch(
                         checked = isOpen,
@@ -250,9 +253,9 @@ fun PontoDoceAdminApp() {
                         },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = Color.White,
-                            checkedTrackColor = PinkAccent,
+                            checkedTrackColor = GreenButton,
                             uncheckedThumbColor = Color.Gray,
-                            uncheckedTrackColor = Color.LightGray
+                            uncheckedTrackColor = Color.DarkGray
                         )
                     )
                 }
@@ -264,12 +267,12 @@ fun PontoDoceAdminApp() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 24.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PinkAccent),
+                colors = ButtonDefaults.buttonColors(containerColor = GoldAccent),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Text(
                     text = "Gerenciar Pronta Entrega",
-                    color = Color.White,
+                    color = NavyBackground,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(vertical = 4.dp)
@@ -280,7 +283,7 @@ fun PontoDoceAdminApp() {
                 text = "Fila de Pedidos",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = BrownText,
+                color = GoldAccent,
                 modifier = Modifier.padding(bottom = 12.dp)
             )
 
@@ -452,7 +455,7 @@ fun OrderCard(
     }
 }
 
-// ... Restante do código (InventoryDialog e Previews permanecem inalterados) ...
+    // ... Restante do código (Previews permanecem inalterados) ...
 
 @Composable
 fun InventoryDialog(
@@ -461,100 +464,113 @@ fun InventoryDialog(
     onSave: (List<ProductItem>) -> Unit
 ) {
     var currentList by remember { mutableStateOf(initialList) }
+    var showAddItemDialog by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = LightPinkBackground,
         title = {
             Text(
-                text = "Sabores Disponíveis",
+                text = "Gerenciar Estoque",
                 color = BrownText,
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp
             )
         },
         text = {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(currentList.size) { index ->
-                    val product = currentList[index]
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = product.name,
-                                color = BrownText,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                            
-                            // Se disponível, exibe controle de quantidade
-                            if (product.isAvailable) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(top = 8.dp)
-                                ) {
-                                    IconButton(
-                                        onClick = {
-                                            if (product.quantity > 0) {
+            Column {
+                Button(
+                    onClick = { showAddItemDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = PinkAccent),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("+ Novo Produto", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.heightIn(max = 300.dp) // Limita a altura para o modal não explodir
+                ) {
+                    items(currentList.size) { index ->
+                        val product = currentList[index]
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = product.name,
+                                    color = BrownText,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 16.sp
+                                )
+                                
+                                // Se disponível, exibe controle de quantidade
+                                if (product.isAvailable) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(top = 8.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                if (product.quantity > 0) {
+                                                    val newList = currentList.toMutableList()
+                                                    newList[index] = product.copy(quantity = product.quantity - 1)
+                                                    currentList = newList
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(PinkAccent.copy(alpha = 0.2f))
+                                        ) {
+                                            Text("-", fontSize = 20.sp, color = PinkAccent, fontWeight = FontWeight.Bold)
+                                        }
+                                        
+                                        Text(
+                                            text = "${product.quantity} unid.",
+                                            fontSize = 16.sp,
+                                            color = BrownText,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.padding(horizontal = 12.dp)
+                                        )
+                                        
+                                        IconButton(
+                                            onClick = {
                                                 val newList = currentList.toMutableList()
-                                                newList[index] = product.copy(quantity = product.quantity - 1)
+                                                newList[index] = product.copy(quantity = product.quantity + 1)
                                                 currentList = newList
-                                            }
-                                        },
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(PinkAccent.copy(alpha = 0.2f))
-                                    ) {
-                                        Text("-", fontSize = 20.sp, color = PinkAccent, fontWeight = FontWeight.Bold)
-                                    }
-                                    
-                                    Text(
-                                        text = "${product.quantity} unid.",
-                                        fontSize = 16.sp,
-                                        color = BrownText,
-                                        fontWeight = FontWeight.Medium,
-                                        modifier = Modifier.padding(horizontal = 12.dp)
-                                    )
-                                    
-                                    IconButton(
-                                        onClick = {
-                                            val newList = currentList.toMutableList()
-                                            newList[index] = product.copy(quantity = product.quantity + 1)
-                                            currentList = newList
-                                        },
-                                        modifier = Modifier
-                                            .size(32.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(PinkAccent)
-                                    ) {
-                                        Text("+", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                            },
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(PinkAccent)
+                                        ) {
+                                            Text("+", fontSize = 20.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        // Switch para Disponível/Indisponível
-                        Switch(
-                            checked = product.isAvailable,
-                            onCheckedChange = { isChecked ->
-                                val newList = currentList.toMutableList()
-                                val newQuantity = if (isChecked) (if (product.quantity > 0) product.quantity else 1) else 0
-                                newList[index] = product.copy(isAvailable = isChecked, quantity = newQuantity)
-                                currentList = newList
-                            },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = PinkAccent,
-                                uncheckedThumbColor = Color.Gray,
-                                uncheckedTrackColor = Color.LightGray
+                            // Switch para Disponível/Indisponível
+                            Switch(
+                                checked = product.isAvailable,
+                                onCheckedChange = { isChecked ->
+                                    val newList = currentList.toMutableList()
+                                    val newQuantity = if (isChecked) (if (product.quantity > 0) product.quantity else 1) else 0
+                                    newList[index] = product.copy(isAvailable = isChecked, quantity = newQuantity)
+                                    currentList = newList
+                                },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = PinkAccent,
+                                    uncheckedThumbColor = Color.Gray,
+                                    uncheckedTrackColor = Color.LightGray
+                                )
                             )
-                        )
+                        }
                     }
                 }
             }
@@ -574,6 +590,56 @@ fun InventoryDialog(
             }
         }
     )
+
+    // Dialog secundário para adicionar NOVO ITEM
+    if (showAddItemDialog) {
+        var newName by remember { mutableStateOf("") }
+        // TODO no futuro: Adicionar campo para escolher a FOTO do celular
+
+        AlertDialog(
+            onDismissRequest = { showAddItemDialog = false },
+            containerColor = Color.White,
+            title = { Text("Cadastrar Novo Produto", color = BrownText, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    label = { Text("Nome do Produto / Sabor") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PinkAccent,
+                        focusedLabelColor = PinkAccent
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newName.isNotBlank()) {
+                            // Cria um novo produto indisponível e qtd 0 por padrão
+                            val newItem = ProductItem(
+                                id = "new_${System.currentTimeMillis()}", // ID temporário, o backend que vai gerar o UUID real
+                                name = newName,
+                                isAvailable = false,
+                                quantity = 0
+                            )
+                            currentList = currentList + newItem
+                            showAddItemDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = PinkAccent)
+                ) {
+                    Text("Adicionar à Lista")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddItemDialog = false }) {
+                    Text("Cancelar", color = Color.Gray)
+                }
+            }
+        )
+    }
 }
 
 @Preview(showBackground = true)
