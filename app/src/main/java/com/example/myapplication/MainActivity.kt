@@ -387,8 +387,15 @@ fun OrderCard(
     onStartDelivery: () -> Unit,
     onFinishDelivery: () -> Unit
 ) {
+    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
+    val cardColor = if (isDarkTheme) NavyCard else CardBackground
+    val textColor = if (isDarkTheme) WhiteText else BrownText
+    val subtitleColor = if (isDarkTheme) LightGold else Color.Gray
+    val accentColor = if (isDarkTheme) GoldAccent else PinkAccent
+    val accentTextColor = if (isDarkTheme) NavyBackground else Color.White
+
     Card(
-        colors = CardDefaults.cardColors(containerColor = NavyCard),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
         shape = RoundedCornerShape(12.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         modifier = Modifier.fillMaxWidth()
@@ -400,12 +407,12 @@ fun OrderCard(
                 text = "${order.customerName} (R$ ${order.totalAmount})",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold,
-                color = WhiteText
+                color = textColor
             )
             Text(
                 text = order.address,
                 fontSize = 14.sp,
-                color = LightGold,
+                color = subtitleColor,
                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
             )
             
@@ -454,11 +461,11 @@ fun OrderCard(
             ) {
                 Button(
                     onClick = onStartDelivery,
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldAccent),
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.weight(1f).padding(end = 8.dp)
                 ) {
-                    Text("Separar / Iniciar Rota", color = NavyBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text("Separar / Iniciar Rota", color = accentTextColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
                 
                 Button(
@@ -484,13 +491,23 @@ fun InventoryDialog(
     var currentList by remember { mutableStateOf(initialList) }
     var showAddItemDialog by remember { mutableStateOf(false) }
 
+    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
+    val bgColor = if (isDarkTheme) DialogBackgroundDark else LightPinkBackground
+    val titleColor = if (isDarkTheme) GoldAccent else BrownText
+    val textColor = if (isDarkTheme) WhiteText else BrownText
+    val subtitleColor = if (isDarkTheme) LightGold else BrownText
+    val cardColor = if (isDarkTheme) NavyCard else PinkAccent.copy(alpha = 0.2f)
+    val accentColor = if (isDarkTheme) GoldAccent else PinkAccent
+    val accentTextColor = if (isDarkTheme) NavyBackground else Color.White
+    val dismissColor = if (isDarkTheme) RedButton else PinkAccent
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = DialogBackground,
+        containerColor = bgColor,
         title = {
             Text(
                 text = "Gerenciar Estoque",
-                color = GoldAccent,
+                color = titleColor,
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp
             )
@@ -499,11 +516,11 @@ fun InventoryDialog(
             Column {
                 Button(
                     onClick = { showAddItemDialog = true },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldAccent),
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                     modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("+ Novo Produto", color = NavyBackground, fontWeight = FontWeight.Bold)
+                    Text("+ Novo Produto", color = accentTextColor, fontWeight = FontWeight.Bold)
                 }
 
                 LazyColumn(
@@ -520,7 +537,7 @@ fun InventoryDialog(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = product.name,
-                                    color = WhiteText,
+                                    color = textColor,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
@@ -542,15 +559,15 @@ fun InventoryDialog(
                                             modifier = Modifier
                                                 .size(32.dp)
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .background(NavyCard)
+                                                .background(cardColor)
                                         ) {
-                                            Text("-", fontSize = 20.sp, color = GoldAccent, fontWeight = FontWeight.Bold)
+                                            Text("-", fontSize = 20.sp, color = accentColor, fontWeight = FontWeight.Bold)
                                         }
                                         
                                         Text(
                                             text = "${product.quantity} unid.",
                                             fontSize = 16.sp,
-                                            color = LightGold,
+                                            color = subtitleColor,
                                             fontWeight = FontWeight.Medium,
                                             modifier = Modifier.padding(horizontal = 12.dp)
                                         )
@@ -564,9 +581,9 @@ fun InventoryDialog(
                                             modifier = Modifier
                                                 .size(32.dp)
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .background(GoldAccent)
+                                                .background(accentColor)
                                         ) {
-                                            Text("+", fontSize = 20.sp, color = NavyBackground, fontWeight = FontWeight.Bold)
+                                            Text("+", fontSize = 20.sp, color = accentTextColor, fontWeight = FontWeight.Bold)
                                         }
                                     }
                                 }
@@ -604,7 +621,7 @@ fun InventoryDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancelar", color = RedButton, fontWeight = FontWeight.Bold)
+                Text("Cancelar", color = dismissColor, fontWeight = FontWeight.Bold)
             }
         }
     )
@@ -614,23 +631,25 @@ fun InventoryDialog(
         var newName by remember { mutableStateOf("") }
         // TODO no futuro: Adicionar campo para escolher a FOTO do celular
 
+        val inputBg = if (isDarkTheme) NavyCard else Color.White
+
         AlertDialog(
             onDismissRequest = { showAddItemDialog = false },
-            containerColor = DialogBackground,
-            title = { Text("Cadastrar Novo Produto", color = GoldAccent, fontWeight = FontWeight.Bold) },
+            containerColor = inputBg,
+            title = { Text("Cadastrar Novo Produto", color = titleColor, fontWeight = FontWeight.Bold) },
             text = {
                 OutlinedTextField(
                     value = newName,
                     onValueChange = { newName = it },
-                    label = { Text("Nome do Produto / Sabor", color = LightGold) },
+                    label = { Text("Nome do Produto / Sabor", color = subtitleColor) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = GoldAccent,
-                        focusedLabelColor = GoldAccent,
+                        focusedBorderColor = accentColor,
+                        focusedLabelColor = accentColor,
                         unfocusedBorderColor = Color.Gray,
-                        unfocusedTextColor = WhiteText,
-                        focusedTextColor = WhiteText
+                        unfocusedTextColor = textColor,
+                        focusedTextColor = textColor
                     )
                 )
             },
@@ -649,14 +668,14 @@ fun InventoryDialog(
                             showAddItemDialog = false
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = GoldAccent)
+                    colors = ButtonDefaults.buttonColors(containerColor = accentColor)
                 ) {
-                    Text("Adicionar à Lista", color = NavyBackground, fontWeight = FontWeight.Bold)
+                    Text("Adicionar à Lista", color = accentTextColor, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showAddItemDialog = false }) {
-                    Text("Cancelar", color = RedButton, fontWeight = FontWeight.Bold)
+                    Text("Cancelar", color = dismissColor, fontWeight = FontWeight.Bold)
                 }
             }
         )
