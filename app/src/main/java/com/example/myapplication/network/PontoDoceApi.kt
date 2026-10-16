@@ -7,6 +7,7 @@ import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PATCH
+import retrofit2.http.DELETE
 import retrofit2.http.Path
 
 // Requisição para atualizar o status da loja
@@ -37,4 +38,7 @@ interface PontoDoceApi {
     
     @POST("/admin/inventory/update")
     suspend fun updateInventory(@Body request: UpdateInventoryRequest): Response<Any>
+
+    @DELETE("/admin/products/{id}")
+    suspend fun deleteProduct(@Path("id") id: String): Response<Any>
 }
