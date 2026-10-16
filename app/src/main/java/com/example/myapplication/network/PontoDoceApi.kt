@@ -26,6 +26,9 @@ interface PontoDoceApi {
     @POST("/admin/store/toggle")
     suspend fun toggleStore(@Body request: ToggleStoreRequest): Response<StoreStatusUpdateResponse>
 
+    @GET("/admin/products")
+    suspend fun getAdminProducts(): Response<List<com.example.myapplication.ProductItem>>
+
     @PATCH("/admin/orders/{id}/status")
     suspend fun updateOrderStatus(
         @Path("id") orderId: String,

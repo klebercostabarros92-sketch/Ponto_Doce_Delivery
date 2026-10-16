@@ -2,12 +2,14 @@ package com.example.myapplication
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -73,8 +75,14 @@ data class Order(
     val paymentMethod: String
 )
 
-// Modelo de Dados do Produto no Estoque
-data class ProductItem(val id: String, val name: String, val isAvailable: Boolean, val quantity: Int)
+// Modelo de Dados do Produto no Estoque agora suporta FOTO
+data class ProductItem(
+    val id: String, 
+    val name: String, 
+    val isAvailable: Boolean, 
+    val quantity: Int,
+    val photoUri: String? = null
+)
 
 @Composable
 fun PontoDoceAdminApp() {
@@ -86,10 +94,13 @@ fun PontoDoceAdminApp() {
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
 
+    // Toggle de Tema (O usuário agora controla se quer Claro ou Escuro (Premium))
+    var isDarkTheme by remember { mutableStateOf(true) } // Padrão: Tema Premium Marinho/Dourado
+
     // Variável para guardar qual pedido está aguardando as permissões de GPS
     var orderToStartDelivery by remember { mutableStateOf<String?>(null) }
     
-    // Lista de Pedidos agora é dinâmica para receber os eventos via WebSocket
+    // Lista de Pedidos
     var orders by remember {
         mutableStateOf(
             listOf(
@@ -99,7 +110,19 @@ fun PontoDoceAdminApp() {
         )
     }
 
-    // Launcher para pedir as permissões de GPS (e Notificações no Android 13+)
+    // Lista de Produtos do Estoque
+    var inventoryList by remember {
+        mutableStateOf(
+            listOf(
+                ProductItem("1", "Brigadeiro com coco", false, 0),
+                ProductItem("2", "Doce de leite com morango", false, 0),
+                ProductItem("3", "Maracujá com creme", false, 0),
+                ProductItem("4", "Limão com chocolate", false, 0)
+            )
+        )
+    }
+
+    // Launcher para pedir as permissões de GPS
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -108,7 +131,6 @@ fun PontoDoceAdminApp() {
         
         if (locationGranted) {
             orderToStartDelivery?.let { orderId ->
-                // Iniciar o Serviço de GPS em background
                 val intent = Intent(context, LocationTrackingService::class.java).apply {
                     putExtra("ORDER_ID", orderId)
                 }
@@ -118,10 +140,8 @@ fun PontoDoceAdminApp() {
                     context.startService(intent)
                 }
                 
-                // Limpar variável
                 orderToStartDelivery = null
                 
-                // Atualizar o status do pedido na API (Avisa o cliente pelo Zap que saiu)
                 coroutineScope.launch {
                     try {
                         RetrofitClient.api.updateOrderStatus(orderId, UpdateOrderStatusRequest("DELIVERING"))
@@ -141,7 +161,6 @@ fun PontoDoceAdminApp() {
 
     // Buscar o status da loja e ouvir novos pedidos (WebSocket)
     LaunchedEffect(Unit) {
-        // HTTP GET: Status Inicial
         try {
             val response = RetrofitClient.api.getStoreStatus()
             if (response.isSuccessful && response.body() != null) {
@@ -153,8 +172,20 @@ fun PontoDoceAdminApp() {
         } catch (e: Exception) {
             e.printStackTrace()
         }
+
+        // Buscar a lista real de produtos cadastrados no servidor
+        try {
+            val prodResponse = RetrofitClient.api.getAdminProducts()
+            if (prodResponse.isSuccessful && prodResponse.body() != null) {
+                val fetched = prodResponse.body()!!
+                if (fetched.isNotEmpty()) {
+                    inventoryList = fetched
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         
-        // Conexão WebSocket para receber alertas de NOVO PEDIDO em tempo real
         try {
             val socket: Socket = IO.socket("http://192.168.15.52:3333")
             socket.connect()
@@ -169,10 +200,7 @@ fun PontoDoceAdminApp() {
                         address = data.optString("delivery_address"),
                         paymentMethod = data.optString("payment_method", "PIX").uppercase()
                     )
-                    
-                    // Adiciona o novo pedido no topo da lista
                     orders = listOf(newOrder) + orders
-                    
                     coroutineScope.launch {
                         snackbarHostState.showSnackbar("🔔 NOVO PEDIDO RECEBIDO!")
                     }
@@ -182,22 +210,8 @@ fun PontoDoceAdminApp() {
             e.printStackTrace()
         }
     }
-    
-    // Lista pré-cadastrada de sabores baseada no flyer
-    var inventoryList by remember {
-        mutableStateOf(
-            listOf(
-                ProductItem("1", "Brigadeiro com coco", false, 0),
-                ProductItem("2", "Doce de leite com morango", false, 0),
-                ProductItem("3", "Maracujá com creme", false, 0),
-                ProductItem("4", "Limão com chocolate", false, 0)
-            )
-        )
-    }
 
-    // Tema Atual Baseado no Sistema
-    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
-    
+    // Definindo as cores com base no toggle de tema manual
     val bgColor = if (isDarkTheme) NavyBackground else LightPinkBackground
     val cardColor = if (isDarkTheme) NavyCard else CardBackground
     val titleColor = if (isDarkTheme) GoldAccent else BrownText
@@ -216,19 +230,36 @@ fun PontoDoceAdminApp() {
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
-            Text(
-                text = "$storeName — Gestão",
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                color = titleColor
-            )
-            Text(
-                text = instagramUrl,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = subtitleColor,
-                modifier = Modifier.padding(bottom = 24.dp)
-            )
+            // Cabeçalho com o botão de Alternar Tema
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column {
+                    Text(
+                        text = "$storeName — Gestão",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = titleColor
+                    )
+                    Text(
+                        text = instagramUrl,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = subtitleColor,
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    )
+                }
+                
+                // Botão Mágico: Alternar Tema
+                IconButton(
+                    onClick = { isDarkTheme = !isDarkTheme },
+                    modifier = Modifier.background(cardColor, RoundedCornerShape(8.dp))
+                ) {
+                    Text(if (isDarkTheme) "☀️" else "🌙", fontSize = 20.sp)
+                }
+            }
 
             // Card de Status da Loja
             Card(
@@ -312,34 +343,22 @@ fun PontoDoceAdminApp() {
                 items(orders) { order ->
                     OrderCard(
                         order = order,
+                        isDarkTheme = isDarkTheme,
                         onStartDelivery = {
                             orderToStartDelivery = order.id
-                            
-                            // Monta a lista de permissões necessárias para ligar o mapa
                             val permissionsToRequest = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION,
-                                    Manifest.permission.POST_NOTIFICATIONS
-                                )
+                                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.POST_NOTIFICATIONS)
                             } else {
-                                arrayOf(
-                                    Manifest.permission.ACCESS_FINE_LOCATION,
-                                    Manifest.permission.ACCESS_COARSE_LOCATION
-                                )
+                                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
                             }
                             permissionLauncher.launch(permissionsToRequest)
                         },
                         onFinishDelivery = {
-                            // Parar o serviço de GPS em background
                             val intent = Intent(context, LocationTrackingService::class.java)
                             context.stopService(intent)
-                            
-                            // Avisar ao servidor que concluiu
                             coroutineScope.launch {
                                 try {
                                     RetrofitClient.api.updateOrderStatus(order.id, UpdateOrderStatusRequest("COMPLETED"))
-                                    // Remove o pedido da lista local
                                     orders = orders.filter { it.id != order.id }
                                     snackbarHostState.showSnackbar("Entrega finalizada com sucesso!")
                                 } catch (e: Exception) {
@@ -356,6 +375,7 @@ fun PontoDoceAdminApp() {
     if (showInventoryDialog) {
         InventoryDialog(
             initialList = inventoryList,
+            isDarkTheme = isDarkTheme,
             onDismiss = { showInventoryDialog = false },
             onSave = { updatedList ->
                 inventoryList = updatedList
@@ -365,7 +385,6 @@ fun PontoDoceAdminApp() {
                     try {
                         val request = com.example.myapplication.network.UpdateInventoryRequest(updatedList)
                         val response = RetrofitClient.api.updateInventory(request)
-                        
                         if (response.isSuccessful) {
                             snackbarHostState.showSnackbar("Estoque atualizado com sucesso!")
                         } else {
@@ -384,10 +403,10 @@ fun PontoDoceAdminApp() {
 @Composable
 fun OrderCard(
     order: Order,
+    isDarkTheme: Boolean,
     onStartDelivery: () -> Unit,
     onFinishDelivery: () -> Unit
 ) {
-    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
     val cardColor = if (isDarkTheme) NavyCard else CardBackground
     val textColor = if (isDarkTheme) WhiteText else BrownText
     val subtitleColor = if (isDarkTheme) LightGold else Color.Gray
@@ -416,37 +435,36 @@ fun OrderCard(
                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
             )
             
-            // Destaque do Método de Pagamento (Somente PIX ou Dinheiro)
             if (order.paymentMethod == "PIX") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFE8F5E9)) // Verde clarinho
+                        .background(Color(0xFFE8F5E9))
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "💰 PIX - Confira o recibo no PicPay!",
-                        color = Color(0xFF2E7D32), // Verde escuro
+                        color = Color(0xFF2E7D32),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
                 }
-            } else { // Se não é PIX, é DINHEIRO
+            } else {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFFFF3E0)) // Laranja clarinho
+                        .background(Color(0xFFFFF3E0))
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "💵 Pagamento na Entrega (Dinheiro)",
-                        color = Color(0xFFE65100), // Laranja escuro
+                        color = Color(0xFFE65100),
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
@@ -480,18 +498,16 @@ fun OrderCard(
     }
 }
 
-    // ... Restante do código (Previews permanecem inalterados) ...
-
 @Composable
 fun InventoryDialog(
     initialList: List<ProductItem>,
+    isDarkTheme: Boolean,
     onDismiss: () -> Unit,
     onSave: (List<ProductItem>) -> Unit
 ) {
     var currentList by remember { mutableStateOf(initialList) }
     var showAddItemDialog by remember { mutableStateOf(false) }
 
-    val isDarkTheme = androidx.compose.foundation.isSystemInDarkTheme()
     val bgColor = if (isDarkTheme) DialogBackgroundDark else LightPinkBackground
     val titleColor = if (isDarkTheme) GoldAccent else BrownText
     val textColor = if (isDarkTheme) WhiteText else BrownText
@@ -525,7 +541,7 @@ fun InventoryDialog(
 
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.heightIn(max = 300.dp) // Limita a altura para o modal não explodir
+                    modifier = Modifier.heightIn(max = 300.dp)
                 ) {
                     items(currentList.size) { index ->
                         val product = currentList[index]
@@ -542,7 +558,17 @@ fun InventoryDialog(
                                     fontSize = 16.sp
                                 )
                                 
-                                // Se disponível, exibe controle de quantidade
+                                // Indicador de foto anexada
+                                if (product.photoUri != null) {
+                                    Text(
+                                        text = "📷 Foto Anexada",
+                                        color = GreenButton,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(top = 4.dp)
+                                    )
+                                }
+                                
                                 if (product.isAvailable) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -589,7 +615,6 @@ fun InventoryDialog(
                                 }
                             }
 
-                            // Switch para Disponível/Indisponível
                             Switch(
                                 checked = product.isAvailable,
                                 onCheckedChange = { isChecked ->
@@ -629,7 +654,14 @@ fun InventoryDialog(
     // Dialog secundário para adicionar NOVO ITEM
     if (showAddItemDialog) {
         var newName by remember { mutableStateOf("") }
-        // TODO no futuro: Adicionar campo para escolher a FOTO do celular
+        var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+        
+        // Inicializa o seletor de fotos da galeria do celular
+        val photoPickerLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.PickVisualMedia()
+        ) { uri ->
+            selectedImageUri = uri
+        }
 
         val inputBg = if (isDarkTheme) NavyCard else Color.White
 
@@ -638,31 +670,51 @@ fun InventoryDialog(
             containerColor = inputBg,
             title = { Text("Cadastrar Novo Produto", color = titleColor, fontWeight = FontWeight.Bold) },
             text = {
-                OutlinedTextField(
-                    value = newName,
-                    onValueChange = { newName = it },
-                    label = { Text("Nome do Produto / Sabor", color = subtitleColor) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = accentColor,
-                        focusedLabelColor = accentColor,
-                        unfocusedBorderColor = Color.Gray,
-                        unfocusedTextColor = textColor,
-                        focusedTextColor = textColor
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = newName,
+                        onValueChange = { newName = it },
+                        label = { Text("Nome do Produto / Sabor", color = subtitleColor) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = accentColor,
+                            focusedLabelColor = accentColor,
+                            unfocusedBorderColor = Color.Gray,
+                            unfocusedTextColor = textColor,
+                            focusedTextColor = textColor
+                        )
                     )
-                )
+                    
+                    // Botão para abrir a galeria
+                    Button(
+                        onClick = { 
+                            photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) 
+                        },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedImageUri != null) GreenButton else Color.Gray
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = if (selectedImageUri != null) "📸 Foto Selecionada ✓" else "📷 Anexar Foto da Galeria",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (newName.isNotBlank()) {
-                            // Cria um novo produto indisponível e qtd 0 por padrão
                             val newItem = ProductItem(
-                                id = "new_${System.currentTimeMillis()}", // ID temporário, o backend que vai gerar o UUID real
+                                id = "new_${System.currentTimeMillis()}",
                                 name = newName,
                                 isAvailable = false,
-                                quantity = 0
+                                quantity = 0,
+                                photoUri = selectedImageUri?.toString() // Salva o endereço da foto
                             )
                             currentList = currentList + newItem
                             showAddItemDialog = false
