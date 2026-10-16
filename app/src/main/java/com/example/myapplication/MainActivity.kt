@@ -24,7 +24,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.myapplication.network.RetrofitClient
@@ -75,10 +78,12 @@ data class Order(
     val paymentMethod: String
 )
 
-// Modelo de Dados do Produto no Estoque agora suporta FOTO
+// Modelo de Dados do Produto no Estoque (com FOTO, Descrição e Preço)
 data class ProductItem(
     val id: String, 
     val name: String, 
+    val description: String = "",
+    val price: Double = 0.0,
     val isAvailable: Boolean, 
     val quantity: Int,
     val photoUri: String? = null
@@ -100,27 +105,11 @@ fun PontoDoceAdminApp() {
     // Variável para guardar qual pedido está aguardando as permissões de GPS
     var orderToStartDelivery by remember { mutableStateOf<String?>(null) }
     
-    // Lista de Pedidos
-    var orders by remember {
-        mutableStateOf(
-            listOf(
-                Order("1", "Maria Silva", "36,00", "Rua das Flores, 123 - Centro", "PIX"),
-                Order("2", "João Pedro", "12,00", "Av. Brasil, 456 - Jd. Paulista", "DINHEIRO")
-            )
-        )
-    }
+    // Lista de Pedidos vazia por padrão (preenchida via WebSocket)
+    var orders by remember { mutableStateOf(emptyList<Order>()) }
 
-    // Lista de Produtos do Estoque
-    var inventoryList by remember {
-        mutableStateOf(
-            listOf(
-                ProductItem("1", "Brigadeiro com coco", false, 0),
-                ProductItem("2", "Doce de leite com morango", false, 0),
-                ProductItem("3", "Maracujá com creme", false, 0),
-                ProductItem("4", "Limão com chocolate", false, 0)
-            )
-        )
-    }
+    // Lista de Produtos do Estoque vazia por padrão (preenchida via API)
+    var inventoryList by remember { mutableStateOf(emptyList<ProductItem>()) }
 
     // Launcher para pedir as permissões de GPS
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -552,11 +541,21 @@ fun InventoryDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = product.name,
+                                    text = "${product.name} (R$ ${String.format("%.2f", product.price).replace('.', ',')})",
                                     color = textColor,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 16.sp
                                 )
+                                if (product.description.isNotBlank()) {
+                                    Text(
+                                        text = product.description,
+                                        color = subtitleColor,
+                                        fontSize = 12.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                }
                                 
                                 // Indicador de foto anexada
                                 if (product.photoUri != null) {
@@ -577,8 +576,10 @@ fun InventoryDialog(
                                         IconButton(
                                             onClick = {
                                                 if (product.quantity > 0) {
+                                                    val newQty = product.quantity - 1
+                                                    val isAvail = newQty > 0
                                                     val newList = currentList.toMutableList()
-                                                    newList[index] = product.copy(quantity = product.quantity - 1)
+                                                    newList[index] = product.copy(quantity = newQty, isAvailable = isAvail)
                                                     currentList = newList
                                                 }
                                             },
@@ -654,6 +655,8 @@ fun InventoryDialog(
     // Dialog secundário para adicionar NOVO ITEM
     if (showAddItemDialog) {
         var newName by remember { mutableStateOf("") }
+        var newDesc by remember { mutableStateOf("") }
+        var newPrice by remember { mutableStateOf("") }
         var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
         
         // Inicializa o seletor de fotos da galeria do celular
@@ -668,40 +671,77 @@ fun InventoryDialog(
         AlertDialog(
             onDismissRequest = { showAddItemDialog = false },
             containerColor = inputBg,
-            title = { Text("Cadastrar Novo Produto", color = titleColor, fontWeight = FontWeight.Bold) },
+            title = { Text("Cadastrar Produto", color = titleColor, fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = newName,
-                        onValueChange = { newName = it },
-                        label = { Text("Nome do Produto / Sabor", color = subtitleColor) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = accentColor,
-                            focusedLabelColor = accentColor,
-                            unfocusedBorderColor = Color.Gray,
-                            unfocusedTextColor = textColor,
-                            focusedTextColor = textColor
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    item {
+                        OutlinedTextField(
+                            value = newName,
+                            onValueChange = { newName = it },
+                            label = { Text("Nome do Produto / Sabor", color = subtitleColor) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = accentColor,
+                                focusedLabelColor = accentColor,
+                                unfocusedBorderColor = Color.Gray,
+                                unfocusedTextColor = textColor,
+                                focusedTextColor = textColor
+                            )
                         )
-                    )
-                    
-                    // Botão para abrir a galeria
-                    Button(
-                        onClick = { 
-                            photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) 
-                        },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (selectedImageUri != null) GreenButton else Color.Gray
-                        ),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = if (selectedImageUri != null) "📸 Foto Selecionada ✓" else "📷 Anexar Foto da Galeria",
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = newDesc,
+                            onValueChange = { newDesc = it },
+                            label = { Text("Ingredientes / Descrição", color = subtitleColor) },
+                            modifier = Modifier.fillMaxWidth(),
+                            minLines = 2,
+                            maxLines = 3,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = accentColor,
+                                focusedLabelColor = accentColor,
+                                unfocusedBorderColor = Color.Gray,
+                                unfocusedTextColor = textColor,
+                                focusedTextColor = textColor
+                            )
                         )
+                    }
+                    item {
+                        OutlinedTextField(
+                            value = newPrice,
+                            onValueChange = { newPrice = it },
+                            label = { Text("Preço (R$)", color = subtitleColor) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = accentColor,
+                                focusedLabelColor = accentColor,
+                                unfocusedBorderColor = Color.Gray,
+                                unfocusedTextColor = textColor,
+                                focusedTextColor = textColor
+                            )
+                        )
+                    }
+                    item {
+                        // Botão para abrir a galeria
+                        Button(
+                            onClick = { 
+                                photoPickerLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) 
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (selectedImageUri != null) GreenButton else Color.Gray
+                            ),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = if (selectedImageUri != null) "📸 Foto Selecionada ✓" else "📷 Anexar Foto da Galeria",
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             },
@@ -709,9 +749,12 @@ fun InventoryDialog(
                 Button(
                     onClick = {
                         if (newName.isNotBlank()) {
+                            val priceParsed = newPrice.replace(",", ".").toDoubleOrNull() ?: 0.0
                             val newItem = ProductItem(
                                 id = "new_${System.currentTimeMillis()}",
                                 name = newName,
+                                description = newDesc,
+                                price = priceParsed,
                                 isAvailable = false,
                                 quantity = 0,
                                 photoUri = selectedImageUri?.toString() // Salva o endereço da foto
